@@ -1,4 +1,4 @@
-  libdev-gsl
+  libgsl-dev
   mpich
-  libdev-mpich
+  libmpich-dev
   
