@@ -5,13 +5,13 @@
 #include <string.h>
 #include <time.h>
 #include <mpi.h>
-
+#define PI 3.14159265358979323846
 double nDimensions, mVelocity, nIterations, seed;
-double x_min = -32.768;
-double x_max = 32.768;
+double x_min = -600;
+double x_max = 600;
 
 double ackley(double x[], double nDimensions);
-
+double Griewanks_function(double x[], double nDimensions);
 int main(int argc, char *argv[]) {
     int i,j;
     double nParticles;
@@ -118,7 +118,7 @@ printf("%d distributed_particles\n",distributed_particles );
             }
 
             // update particle fitness
-            fit = ackley(positions[i], nDimensions);
+            fit = Griewanks_function(positions[i], nDimensions);
             // update personal best position?
             if (fit < pBestFitness[i]) {
                 pBestFitness[i] = fit;
@@ -184,65 +184,65 @@ double ackley(double x[], double nDimensions) {
 
 double sphere(double x[], double nDimensions)
 {
-	double squared_sum=0;
-	for(int i=0;i<nDimensions;i++)
-		squared_sum+=(x[i]*x[i]);
-	return squared_sum;
+    double squared_sum=0;
+    for(int i=0;i<nDimensions;i++)
+        squared_sum+=(x[i]*x[i]);
+    return squared_sum;
 }
 
 double rosenbrock_function(double x[], double nDimensions)
 {
-	double squared_sum=0;
-	for(int i=0;i<nDimensions-1;i++)
-	{
-		squared_sum+=(100*pow((pow(x[i],2)-x[i+1]),2)+pow(x[i]-1,2));
-	}
-	return squared_sum; 
+    double squared_sum=0;
+    for(int i=0;i<nDimensions-1;i++)
+    {
+        squared_sum+=(100*pow((pow(x[i],2)-x[i+1]),2)+pow(x[i]-1,2));
+    }
+    return squared_sum; 
 }
 
 double Griewanks_function(double x[], double nDimensions)
-{
-	double or_sum=0;
-	double and_sum=0;
-	for(int i=0;i<nDimensions;i++)
-	{
-		or_sum+=(x[i]/4000);
-		and_sum*=cos(x[i]/sqrt(i));
-	}
-	return 1+or_sum+and_sum;
+{   //-600 - 600
+    double or_sum=0;
+    double and_sum=0;
+    for(int i=0;i<nDimensions;i++)
+    {
+        or_sum+=(x[i]*x[i]);
+        and_sum*=cos(x[i]/sqrt(i));
+    }
+    return 1+or_sum/4000+and_sum;
 }
 
 double rastrigin_function(double x[], double nDimensions)
 {
-	double sum=0;
-	for(int i=0;i<nDimensions;i++)
-	{
-		sum+=(10+pow(x[i],2)-(10*cos(2*PI*x[i])));
-	}
-	return sum;
+    double sum=0;
+    for(int i=0;i<nDimensions;i++)
+    {
+        sum+=(10+pow(x[i],2)-(10*cos(2*PI*x[i])));
+    }
+    return sum;
 }
 
 double non_continuous_rastrigin_function(double x[], double nDimensions)
 {
-	double sum=0;
-	double y;
-	for(int i=0;i<nDimensions;i++)
-	{
-		if(abs(x[i])<0.5)
-			y=x[i];
-		else
-			y=round(2*x[i])/2;
-		sum+=(10+pow(y,2)-(10*cos(2*PI*y)));
-	}
-	return sum;
+    double sum=0;
+    double y;
+    for(int i=0;i<nDimensions;i++)
+    {
+        if(abs(x[i])<0.5)
+            y=x[i];
+        else
+            y=round(2*x[i])/2;
+        sum+=(10+pow(y,2)-(10*cos(2*PI*y)));
+    }
+    return sum;
 }
 
 double schwefel_function(double x[], double nDimensions)
 {
-	double sum=0;
-	for(int i=0;i<nDimensions;i++)
-	{
-		sum+=(x[i]*sin(pow(abs(x[i]),0.5)));
-	}
-	return 418.9829*nDimensions-sum;
+    double sum=0;
+    for(int i=0;i<nDimensions;i++)
+    {
+        sum+=(x[i]*sin(pow(abs(x[i]),0.5)));
+    }
+    return 418.9829*nDimensions-sum;
 }
