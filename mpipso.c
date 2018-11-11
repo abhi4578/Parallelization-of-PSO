@@ -4,18 +4,17 @@
 #include <gsl/gsl_math.h>
 #include <string.h>
 #include <time.h>
+#include <mpi.h>
 
 double nDimensions, mVelocity, nIterations, seed;
 double x_min = -32.768;
 double x_max = 32.768;
 
 double ackley(double x[], double nDimensions);
-void calculate(double nParticles, double result[]);
 
 int main(int argc, char *argv[]) {
-    int i;
+    int i,j;
     double nParticles;
-
     //Argument handling START
     for(i=1; i < argc-1; i++) {
         if (strcmp(argv[i], "-D") == 0)
@@ -39,27 +38,47 @@ int main(int argc, char *argv[]) {
         nIterations = 1;
     if (seed == 0)
         seed = 1;
-    double result[(int)nParticles];
-    int j,step;
+
+    
+int size,myrank,distributed_particles;
+MPI_Init(&argc,&argv);
+MPI_Comm_size(MPI_COMM_WORLD,&size);
+MPI_Comm_rank(MPI_COMM_WORLD,&myrank);
+if(myrank==0)
+{
+    distributed_particles=(int)nParticles/size;
+    printf("%d distributed_particles\n",distributed_particles );
+}
+MPI_Bcast(&distributed_particles,1,MPI_INT,0,MPI_COMM_WORLD);
+if(myrank==0)
+{
+
+distributed_particles+=(int)nParticles%size;
+printf("%d distributed_particles\n",distributed_particles );
+
+}
+    double result[(int)distributed_particles];
+    int step;
     double a,b;
     double c1, c2, rho1, rho2, w, fit;
     c1 = c2 = 1.496;
     w = 0.7298;
-
+    int recievingdata[((int)nDimensions+1)*size];
+    int sendingdata[(int)nDimensions+1];
     //Random number generator initialization
     gsl_rng_env_setup();
     gsl_rng * r = gsl_rng_alloc(gsl_rng_default);
     gsl_rng_set(r, time(0));
 
-    double positions[(int)nParticles][(int)nDimensions];
-    double velocities[(int)nParticles][(int)nDimensions];
-    double pBestPositions[(int)nParticles][(int)nDimensions];    
-    double pBestFitness[(int)nParticles];
+    double positions[(int)distributed_particles][(int)nDimensions];
+    double velocities[(int)distributed_particles][(int)nDimensions];
+    double pBestPositions[(int)distributed_particles][(int)nDimensions];    
+    double pBestFitness[(int)distributed_particles];
     double gBestPosition[(int)nDimensions];
     double gBestFitness = DBL_MAX;
 
     //particle initialization
-    for (i=0; i<nParticles; i++) {
+    for (i=0; i<distributed_particles; i++) {
         for (j=0; j<nDimensions; j++) {
             a = x_min + (x_max - x_min) *  gsl_rng_uniform(r);
             b = x_min + (x_max - x_min) *  gsl_rng_uniform(r);
@@ -67,7 +86,7 @@ int main(int argc, char *argv[]) {
             pBestPositions[i][j] = a;
             velocities[i][j] = (a-b) / 2.;
         }
-        pBestFitness[i] = ackley(positions[i],nDimensions);
+        pBestFitness[i] = ackley(positions[i],(int)nDimensions);
         if (pBestFitness[i] < gBestFitness) {
             memmove((void *)gBestPosition, (void *)&positions[i], sizeof(double) * nDimensions);
             gBestFitness = pBestFitness[i];
@@ -76,7 +95,7 @@ int main(int argc, char *argv[]) {
 
     //actual calculation
     for (step=0; step<nIterations; step++) {
-        for (i=0; i<nParticles; i++) {
+        for (i=0; i<distributed_particles; i++) {
             for (j=0; j<nDimensions; j++) {
                 // calculate stochastic coefficients
                 rho1 = c1 * gsl_rng_uniform(r);
@@ -116,9 +135,35 @@ int main(int argc, char *argv[]) {
                     sizeof(double) * nDimensions);
             }
         }
+        for(int k=0;k<(nDimensions);k++)
+            sendingdata[k]=gBestPosition[k];
+        sendingdata[(int)nDimensions]=gBestFitness;
+        MPI_Gather(&sendingdata,nDimensions+1, MPI_INT,&recievingdata,nDimensions+1, MPI_INT, 0, MPI_COMM_WORLD);
+        if(myrank==0)
+        {
+            int min=gBestFitness;
+            int pos=-1;
+            for(int k=0;k<size;k++)
+            { //printf("%d\n",recievingdata[k*((int)nDimensions+1)+((int)nDimensions)] );
+                if(min>=recievingdata[k*((int)nDimensions+1)+((int)nDimensions)])
+                    {
+                        min=recievingdata[k*((int)nDimensions+1)+((int)nDimensions)];
+                        pos=k*((int)nDimensions+1);
+                    }   
+            }
+            gBestFitness=min;
+            for(int k=pos;k<nDimensions+pos;k++)
+                gBestPosition[k-pos]=recievingdata[k];                  
+        }
+        MPI_Bcast(&gBestPosition,nDimensions,MPI_INT,0,MPI_COMM_WORLD);
+       // MPI_Bcast(&gBestFitness,1,MPI_INT,0,MPI_COMM_WORLD);
     }
-    printf("Result: %f\n", gBestFitness);
+    if(myrank==0)
+    {
+        printf("Result: %f\n", gBestFitness);
+    }   
     gsl_rng_free(r);
+    MPI_Finalize();
 }
 
 double ackley(double x[], double nDimensions) {
@@ -136,3 +181,8 @@ double ackley(double x[], double nDimensions) {
     double term2 = -exp(sum2/nDimensions);
     return term1 + term2 + a + M_E;
 }
+
+
+
+
+// gcc pso.c `pkg-config --cflags --libs gsl` 
