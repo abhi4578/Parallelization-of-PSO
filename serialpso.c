@@ -4,7 +4,7 @@
 #include <gsl/gsl_math.h>
 #include <string.h>
 #include <time.h>
-
+#define PI 3.14159265358979323846
 double nDimensions, mVelocity, nIterations, seed;
 double x_min = -32.768;
 double x_max = 32.768;
