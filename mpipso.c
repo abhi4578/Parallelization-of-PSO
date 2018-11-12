@@ -9,9 +9,94 @@
 double nDimensions, mVelocity, nIterations, seed;
 double x_min = -600;
 double x_max = 600;
+struct timeval TimeValue_Start;
+struct timezone TimeZone_Start;
+struct timeval TimeValue_Final;
+struct timezone TimeZone_Final;
+long time_start, time_end;
+double time_overhead;
 
-double ackley(double x[], double nDimensions);
-double Griewanks_function(double x[], double nDimensions);
+double ackley(double x[], double nDimensions) {
+    double c = 2*M_PI;
+    double b = 0.2;
+    double a = 20;
+    double sum1 = 0;
+    double sum2 = 0;
+    int i;
+    for (i=0; i<nDimensions; i++) {
+        sum1 = sum1 + gsl_pow_2(x[i]);
+        sum2 = sum2 + cos(c*x[i]);
+    }
+    double term1 = -a * exp(-b*sqrt(sum1/nDimensions));
+    double term2 = -exp(sum2/nDimensions);
+    return term1 + term2 + a + M_E;
+}
+
+double sphere(double x[], double nDimensions)
+{
+    double squared_sum=0;
+    for(int i=0;i<nDimensions;i++)
+        squared_sum+=(x[i]*x[i]);
+    return squared_sum;
+}
+
+double rosenbrock_function(double x[], double nDimensions)
+{
+    double squared_sum=0;
+    for(int i=0;i<nDimensions-1;i++)
+    {
+        squared_sum+=(100*pow((pow(x[i],2)-x[i+1]),2)+pow(x[i]-1,2));
+    }
+    return squared_sum; 
+}
+
+double Griewanks_function(double x[], double nDimensions)
+{   //-600 - 600
+    double or_sum=0;
+    double and_sum=0;
+    for(int i=0;i<nDimensions;i++)
+    {
+        or_sum+=(x[i]*x[i]);
+        and_sum*=cos(x[i]/sqrt(i));
+    }
+    return 1+or_sum/4000+and_sum;
+}
+
+double rastrigin_function(double x[], double nDimensions)
+{
+    double sum=0;
+    for(int i=0;i<nDimensions;i++)
+    {
+        sum+=(10+pow(x[i],2)-(10*cos(2*PI*x[i])));
+    }
+    return sum;
+}
+
+double non_continuous_rastrigin_function(double x[], double nDimensions)
+{
+    double sum=0;
+    double y;
+    for(int i=0;i<nDimensions;i++)
+    {
+        if(abs(x[i])<0.5)
+            y=x[i];
+        else
+            y=round(2*x[i])/2;
+        sum+=(10+pow(y,2)-(10*cos(2*PI*y)));
+    }
+    return sum;
+}
+
+double schwefel_function(double x[], double nDimensions)
+{
+    double sum=0;
+    for(int i=0;i<nDimensions;i++)
+    {
+        sum+=(x[i]*sin(pow(abs(x[i]),0.5)));
+    }
+    return 418.9829*nDimensions-sum;
+}
+
 int main(int argc, char *argv[]) {
     int i,j;
     double nParticles;
@@ -39,7 +124,7 @@ int main(int argc, char *argv[]) {
     if (seed == 0)
         seed = 1;
 
-    
+  gettimeofday(&TimeValue_Start, &TimeZone_Start);   
 int size,myrank,distributed_particles;
 MPI_Init(&argc,&argv);
 MPI_Comm_size(MPI_COMM_WORLD,&size);
@@ -161,88 +246,12 @@ printf("%d distributed_particles\n",distributed_particles );
     if(myrank==0)
     {
         printf("Result: %f\n", gBestFitness);
+                gettimeofday(&TimeValue_Final, &TimeZone_Final);
+        time_start = TimeValue_Start.tv_sec * 1000000 + TimeValue_Start.tv_usec;
+        time_end = TimeValue_Final.tv_sec * 1000000 + TimeValue_Final.tv_usec;
+        time_overhead = (time_end - time_start)/1000000.0;
+        printf("\n\n\t\t Time in Seconds (T) : %lf",time_overhead);
     }   
     gsl_rng_free(r);
     MPI_Finalize();
-}
-
-double ackley(double x[], double nDimensions) {
-    double c = 2*M_PI;
-    double b = 0.2;
-    double a = 20;
-    double sum1 = 0;
-    double sum2 = 0;
-    int i;
-    for (i=0; i<nDimensions; i++) {
-        sum1 = sum1 + gsl_pow_2(x[i]);
-        sum2 = sum2 + cos(c*x[i]);
-    }
-    double term1 = -a * exp(-b*sqrt(sum1/nDimensions));
-    double term2 = -exp(sum2/nDimensions);
-    return term1 + term2 + a + M_E;
-}
-
-double sphere(double x[], double nDimensions)
-{
-    double squared_sum=0;
-    for(int i=0;i<nDimensions;i++)
-        squared_sum+=(x[i]*x[i]);
-    return squared_sum;
-}
-
-double rosenbrock_function(double x[], double nDimensions)
-{
-    double squared_sum=0;
-    for(int i=0;i<nDimensions-1;i++)
-    {
-        squared_sum+=(100*pow((pow(x[i],2)-x[i+1]),2)+pow(x[i]-1,2));
-    }
-    return squared_sum; 
-}
-
-double Griewanks_function(double x[], double nDimensions)
-{   //-600 - 600
-    double or_sum=0;
-    double and_sum=0;
-    for(int i=0;i<nDimensions;i++)
-    {
-        or_sum+=(x[i]*x[i]);
-        and_sum*=cos(x[i]/sqrt(i));
-    }
-    return 1+or_sum/4000+and_sum;
-}
-
-double rastrigin_function(double x[], double nDimensions)
-{
-    double sum=0;
-    for(int i=0;i<nDimensions;i++)
-    {
-        sum+=(10+pow(x[i],2)-(10*cos(2*PI*x[i])));
-    }
-    return sum;
-}
-
-double non_continuous_rastrigin_function(double x[], double nDimensions)
-{
-    double sum=0;
-    double y;
-    for(int i=0;i<nDimensions;i++)
-    {
-        if(abs(x[i])<0.5)
-            y=x[i];
-        else
-            y=round(2*x[i])/2;
-        sum+=(10+pow(y,2)-(10*cos(2*PI*y)));
-    }
-    return sum;
-}
-
-double schwefel_function(double x[], double nDimensions)
-{
-    double sum=0;
-    for(int i=0;i<nDimensions;i++)
-    {
-        sum+=(x[i]*sin(pow(abs(x[i]),0.5)));
-    }
-    return 418.9829*nDimensions-sum;
 }
