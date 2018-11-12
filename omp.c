@@ -10,6 +10,7 @@
 #include <time.h>
 // #include <mpi.h>
 #include <omp.h>
+#include <sys/time.h>
 #define PI 3.14159265358979323846
 double nDimensions, mVelocity, nIterations, seed;
 double x_min = -32.768;
@@ -107,7 +108,7 @@ int main(int argc, char *argv[]) {
     int i,j;
     double nParticles;
     //Argument handling START
-    #pragma omp parallel for
+    
     for(i=1; i < argc-1; i++) {
         if (strcmp(argv[i], "-D") == 0)
             nDimensions = strtol(argv[i+1],NULL,10);
@@ -189,8 +190,9 @@ int size,myrank,distributed_particles=nParticles;
 
     //actual calculation
     for (step=0; step<nIterations; step++) {
-        #pragma omp parallel for ordered private(fit)
+       
         for (i=0; i<distributed_particles; i++) {
+             #pragma omp parallel for ordered 
             for (j=0; j<nDimensions; j++) {
                 // calculate stochastic coefficients
                 rho1 = c1 * gsl_rng_uniform(r);
@@ -222,7 +224,7 @@ int size,myrank,distributed_particles=nParticles;
                     sizeof(double) * nDimensions);
             }
             // update gbest??
-            #pragma omp ordered
+           
             {
                 if (pBestFitness[i] < gBestFitness) {
                     // update best fitness
@@ -233,31 +235,7 @@ int size,myrank,distributed_particles=nParticles;
                     }
             }
         }
-        // #pragma omp parallel for
-        // for(int k=0;k<(nDimensions);k++)
-        //     sendingdata[k]=gBestPosition[k];
-        // sendingdata[(int)nDimensions]=gBestFitness;
-        // MPI_Gather(&sendingdata,nDimensions+1, MPI_INT,&recievingdata,nDimensions+1, MPI_INT, 0, MPI_COMM_WORLD);
-        // if(myrank==0)
-        // {
-        //     int min=gBestFitness;
-        //     int pos=-1;
-        //     for(int k=0;k<size;k++)
-        //     { //printf("%d\n",recievingdata[k*((int)nDimensions+1)+((int)nDimensions)] );
-        //         if(min>=recievingdata[k*((int)nDimensions+1)+((int)nDimensions)])
-        //             {
-        //                 min=recievingdata[k*((int)nDimensions+1)+((int)nDimensions)];
-        //                 pos=k*((int)nDimensions+1);
-        //             }   
-        //     }
-        //     gBestFitness=min;
-        //     int k=0;
-        //     #pragma omp parallel for
-        //     for(k=pos;k<nDimensions+pos;k++)
-        //         gBestPosition[k-pos]=recievingdata[k];                  
-        // }
-        // MPI_Bcast(&gBestPosition,nDimensions,MPI_INT,0,MPI_COMM_WORLD);
-       // MPI_Bcast(&gBestFitness,1,MPI_INT,0,MPI_COMM_WORLD);
+        
     }
     // if(omp_get_thread_num()==0)
     // {

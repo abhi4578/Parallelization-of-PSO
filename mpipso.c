@@ -52,14 +52,14 @@ MPI_Comm_rank(MPI_COMM_WORLD,&myrank);
 if(myrank==0)
 {
     distributed_particles=(int)nParticles/size;
-    printf("%d distributed_particles\n",distributed_particles );
+    //printf("%d distributed_particles\n",distributed_particles );
 }
 MPI_Bcast(&distributed_particles,1,MPI_INT,0,MPI_COMM_WORLD);
 if(myrank==0)
 {
 
 distributed_particles+=(int)nParticles%size;
-printf("%d distributed_particles\n",distributed_particles );
+//printf("%d distributed_particles\n",distributed_particles );
 
 }
     double result[(int)distributed_particles];
