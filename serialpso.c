@@ -4,6 +4,7 @@
 #include <gsl/gsl_math.h>
 #include <string.h>
 #include <time.h>
+#include <sys/time.h>
 #define PI 3.14159265358979323846
 double nDimensions, mVelocity, nIterations, seed;
 double x_min = -32.768;
@@ -209,7 +210,8 @@ int main(int argc, char *argv[]) {
         time_start = TimeValue_Start.tv_sec * 1000000 + TimeValue_Start.tv_usec;
         time_end = TimeValue_Final.tv_sec * 1000000 + TimeValue_Final.tv_usec;
         time_overhead = (time_end - time_start)/1000000.0;
-        printf("\n\n\t\t Time in Seconds (T) : %lf",time_overhead);
+        printf("\n Time in Seconds (T) : %lf\n",time_overhead);
     gsl_rng_free(r);
 }
 
+ //gcc serialpso.c -lm -lgsl -lgslcblas -o serial

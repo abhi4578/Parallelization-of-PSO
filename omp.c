@@ -133,31 +133,14 @@ int main(int argc, char *argv[]) {
         seed = 1;
 
     gettimeofday(&TimeValue_Start, &TimeZone_Start); 
-int size,myrank,distributed_particles=nParticles;
-// MPI_Init(&argc,&argv);
-// MPI_Comm_size(MPI_COMM_WORLD,&size);
-// MPI_Comm_rank(MPI_COMM_WORLD,&myrank);
-// if(myrank==0)
-// {
-//     distributed_particles=(int)nParticles/size;
-//     printf("%d distributed_particles\n",distributed_particles );
-// }
-// MPI_Bcast(&distributed_particles,1,MPI_INT,0,MPI_COMM_WORLD);
-// if(myrank==0)
-// {
-
-// distributed_particles+=(int)nParticles%size;
-// printf("%d distributed_particles\n",distributed_particles );
-
-// }
+    int size,myrank,distributed_particles=nParticles;
     double result[(int)distributed_particles];
     int step;
     double a,b;
     double c1, c2, rho1, rho2, w, fit;
     c1 = c2 = 1.496;
     w = 0.7298;
-    // int recievingdata[((int)nDimensions+1)*size];
-    // int sendingdata[(int)nDimensions+1];
+    
     //Random number generator initialization
     gsl_rng_env_setup();
     gsl_rng * r = gsl_rng_alloc(gsl_rng_default);
@@ -169,10 +152,10 @@ int size,myrank,distributed_particles=nParticles;
     double pBestFitness[(int)distributed_particles];
     double gBestPosition[(int)nDimensions];
     double gBestFitness = DBL_MAX;
-
+    int min;
     //particle initialization
-    for (i=0; i<distributed_particles; i++) {
-        #pragma omp parallel for private(a,b)
+    #pragma omp parallel for private(a,b)  reduction(min:gBestFitness)
+    for (i=0; i<distributed_particles; i++) {        
         for (j=0; j<(int)nDimensions; j++) 
         {
             a = x_min + (x_max - x_min) *  gsl_rng_uniform(r);
@@ -183,16 +166,20 @@ int size,myrank,distributed_particles=nParticles;
         }
         pBestFitness[i] = ackley(positions[i],(int)nDimensions);
         if (pBestFitness[i] < gBestFitness) {
-            memmove((void *)gBestPosition, (void *)&positions[i], sizeof(double) * nDimensions);
             gBestFitness = pBestFitness[i];
+            memmove((void *)gBestPosition, (void *)&positions[i], sizeof(double) * nDimensions);
+            
         } 
     }
 
     //actual calculation
     for (step=0; step<nIterations; step++) {
-       
+        #pragma omp parallel num_threads(4) shared(min)
+        {
+
+        #pragma omp for private(a,b) 
         for (i=0; i<distributed_particles; i++) {
-             #pragma omp parallel for ordered 
+             
             for (j=0; j<nDimensions; j++) {
                 // calculate stochastic coefficients
                 rho1 = c1 * gsl_rng_uniform(r);
@@ -225,31 +212,38 @@ int size,myrank,distributed_particles=nParticles;
             }
             // update gbest??
            
-            {
-                if (pBestFitness[i] < gBestFitness) {
-                    // update best fitness
-                    gBestFitness = pBestFitness[i];
-                    // copy particle pos to gbest vector
-                    memmove((void *)gBestPosition, (void *)&pBestPositions[i],
-                        sizeof(double) * nDimensions);
-                    }
-            }
+            
+                
         }
-        
+
+
+     }
+         for(i=0;i<(int)nParticles;i++)
+             {      
+                if (pBestFitness[i] < gBestFitness) {
+                        // update best fitness
+                        min=i;
+                        gBestFitness = pBestFitness[i];    
+                }
+                          
+            }
+
+         // copy particle pos to gbest vector
+         memmove((void *)gBestPosition, (void *)&pBestPositions[min],sizeof(double) * nDimensions);
+            
     }
-    // if(omp_get_thread_num()==0)
-    // {
+    gsl_rng_free(r);
+    
+    
+    
         printf("Result: %f\n", gBestFitness);
-                gettimeofday(&TimeValue_Final, &TimeZone_Final);
+        gettimeofday(&TimeValue_Final, &TimeZone_Final);
         time_start = TimeValue_Start.tv_sec * 1000000 + TimeValue_Start.tv_usec;
         time_end = TimeValue_Final.tv_sec * 1000000 + TimeValue_Final.tv_usec;
         time_overhead = (time_end - time_start)/1000000.0;
-        printf("\n\n\t\t Time in Seconds (T) : %lf",time_overhead);
-    // }   
-    gsl_rng_free(r);
-    // MPI_Finalize();
+        printf("\n Time in Seconds (T) : %lf\n",time_overhead);
+    
+    
+
 }
-
-
-
-// gcc pso.c `pkg-config --cflags --libs gsl` 
+ //gcc -fopenmp omp.c -lm -lgsl -lgslcblas -o omp

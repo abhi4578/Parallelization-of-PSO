@@ -170,8 +170,9 @@ distributed_particles+=(int)nParticles%size;
     double pBestFitness[(int)distributed_particles];
     double gBestPosition[(int)nDimensions];
     double gBestFitness = DBL_MAX;
-
+    int min;
     //particle initialization
+    #pragma omp parallel for private(a,b)  reduction(min:gBestFitness)
     for (i=0; i<distributed_particles; i++) {
         // #pragma omp parallel for private(a,b)
         for (j=0; j<(int)nDimensions; j++) {
@@ -190,76 +191,94 @@ distributed_particles+=(int)nParticles%size;
 
     //actual calculation
     for (step=0; step<nIterations; step++) {
-        #pragma omp parallel for ordered private(fit)
-        for (i=0; i<distributed_particles; i++) {
-            for (j=0; j<nDimensions; j++) {
-                // calculate stochastic coefficients
-                rho1 = c1 * gsl_rng_uniform(r);
-                rho2 = c2 * gsl_rng_uniform(r);
-                // update velocity
-                velocities[i][j] = w * velocities[i][j] + \
-                rho1 * (pBestPositions[i][j] - positions[i][j]) +  \
-                rho2 * (gBestPosition[j] - positions[i][j]);
-                // update position
-                positions[i][j] += velocities[i][j];
+        #pragma omp parallel num_threads(4) shared(min)
+        {
 
-                if (positions[i][j] < x_min) {
-                    positions[i][j] = x_min;
-                    velocities[i][j] = 0;
-                } else if (positions[i][j] > x_max) {
-                    positions[i][j] = x_max;
-                    velocities[i][j] = 0;
+            #pragma omp for private(a,b) 
+            for (i=0; i<distributed_particles; i++) {
+                 
+                    for (j=0; j<nDimensions; j++) {
+                        // calculate stochastic coefficients
+                        rho1 = c1 * gsl_rng_uniform(r);
+                        rho2 = c2 * gsl_rng_uniform(r);
+                        // update velocity
+                        velocities[i][j] = w * velocities[i][j] + \
+                        rho1 * (pBestPositions[i][j] - positions[i][j]) +  \
+                        rho2 * (gBestPosition[j] - positions[i][j]);
+                        // update position
+                        positions[i][j] += velocities[i][j];
+
+                        if (positions[i][j] < x_min) {
+                            positions[i][j] = x_min;
+                            velocities[i][j] = 0;
+                        } else if (positions[i][j] > x_max) {
+                            positions[i][j] = x_max;
+                            velocities[i][j] = 0;
+                        }
+
+                    }
+
+                // update particle fitness
+                fit = ackley(positions[i], nDimensions);
+                // update personal best position?
+                if (fit < pBestFitness[i]) {
+                    pBestFitness[i] = fit;
+                    // copy contents of positions[i] to pos_b[i]
+                    memmove((void *)&pBestPositions[i], (void *)&positions[i],
+                        sizeof(double) * nDimensions);
+                    }   
+                // update gbest??
+               
+                
+                    
                 }
 
-            }
-
-            // update particle fitness
-            fit = ackley(positions[i], nDimensions);
-            // update personal best position?
-            if (fit < pBestFitness[i]) {
-                pBestFitness[i] = fit;
-                // copy contents of positions[i] to pos_b[i]
-                memmove((void *)&pBestPositions[i], (void *)&positions[i],
-                    sizeof(double) * nDimensions);
-            }
-            // update gbest??
-            
-            {
+                #pragma omp for reduction(min:gBestFitness)
+                for(i=0;i<(int)distributed_particles;i++)
                 if (pBestFitness[i] < gBestFitness) {
-                    // update best fitness
-                    gBestFitness = pBestFitness[i];
-                    // copy particle pos to gbest vector
-                    memmove((void *)gBestPosition, (void *)&pBestPositions[i],
-                        sizeof(double) * nDimensions);
+                            // update best fitness
+                            gBestFitness = pBestFitness[i];
+                            // copy particle pos to gbest vector
+                            }
+                
+                #pragma omp  for  
+                 for(i=0;i<(int)distributed_particles;i++)
+                 {if (gBestFitness==pBestFitness[i])
+                    min=i;  
+                   
+                  }
+            
+            
+        }   
+            memmove((void *)gBestPosition, (void *)&pBestPositions[min],sizeof(double) * nDimensions);
+            for(int k=0;k<(int)nDimensions;k++)
+                sendingdata[k]=gBestPosition[k]; 
+            //#pragma omp single
+                sendingdata[(int)nDimensions]=gBestFitness;
+                MPI_Gather(&sendingdata,nDimensions+1, MPI_INT,&recievingdata,nDimensions+1, MPI_INT, 0, MPI_COMM_WORLD);
+                if(myrank==0)
+                {
+                    int min=gBestFitness;
+                    int pos=-1;
+                    for(int k=0;k<size;k++)
+                    { //printf("%d\n",recievingdata[k*((int)nDimensions+1)+((int)nDimensions)] );
+                        if(min>=recievingdata[k*((int)nDimensions+1)+((int)nDimensions)])
+                            {
+                                min=recievingdata[k*((int)nDimensions+1)+((int)nDimensions)];
+                                pos=k*((int)nDimensions+1);
+                            }   
                     }
-            }
-        }
-        #pragma omp parallel for
-        for(int k=0;k<(int)nDimensions;k++)
-            sendingdata[k]=gBestPosition[k];
-        sendingdata[(int)nDimensions]=gBestFitness;
-        MPI_Gather(&sendingdata,nDimensions+1, MPI_INT,&recievingdata,nDimensions+1, MPI_INT, 0, MPI_COMM_WORLD);
-        if(myrank==0)
-        {
-            int min=gBestFitness;
-            int pos=-1;
-            for(int k=0;k<size;k++)
-            { //printf("%d\n",recievingdata[k*((int)nDimensions+1)+((int)nDimensions)] );
-                if(min>=recievingdata[k*((int)nDimensions+1)+((int)nDimensions)])
-                    {
-                        min=recievingdata[k*((int)nDimensions+1)+((int)nDimensions)];
-                        pos=k*((int)nDimensions+1);
-                    }   
-            }
-            gBestFitness=min;
-            int k=0;
-            #pragma omp parallel for
-            for(k=pos;k<(int)nDimensions+pos;k++)
-                gBestPosition[k-pos]=recievingdata[k];                  
-        }
-        MPI_Bcast(&gBestPosition,nDimensions,MPI_INT,0,MPI_COMM_WORLD);
-       // MPI_Bcast(&gBestFitness,1,MPI_INT,0,MPI_COMM_WORLD);
+                    gBestFitness=min;
+                    int k=0;
+                    
+                    for(k=pos;k<(int)nDimensions+pos;k++)
+                        gBestPosition[k-pos]=recievingdata[k];                  
+                }
+                MPI_Bcast(&gBestPosition,nDimensions,MPI_INT,0,MPI_COMM_WORLD);
+                
+        
     }
+
     if(myrank==0)
     {
         printf("Result: %f\n", gBestFitness);
@@ -267,13 +286,13 @@ distributed_particles+=(int)nParticles%size;
         time_start = TimeValue_Start.tv_sec * 1000000 + TimeValue_Start.tv_usec;
         time_end = TimeValue_Final.tv_sec * 1000000 + TimeValue_Final.tv_usec;
         time_overhead = (time_end - time_start)/1000000.0;
-        printf("\n\n\t\t Time in Seconds (T) : %lf",time_overhead);
+        printf("\n Time in Seconds (T) : %lf\n",time_overhead);
     }   
     gsl_rng_free(r);
     MPI_Finalize();
 }
 
+//mpicc -fopenmp mpiomp.c -lm -lgsl -lgslcblas -o mpiomp
 
 
-
-// gcc pso.c `pkg-config --cflags --libs gsl` 
+ 
